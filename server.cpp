@@ -26,7 +26,7 @@ void strToEcho(int sockFd)
 	{
 		ssize_t readLen = 0;
 		readLen = read(sockFd,msg,MAXLINE);
-		if(readLen = 0) return;
+		if(readLen == 0) return;
 		write(sockFd,msg,strlen(msg));
 		memset(msg,0,sizeof(msg));
 	}
@@ -39,17 +39,16 @@ int main(int argc,char** argv)
 	setAddr(servaddr,AF_INET,htonl(INADDR_ANY),htons(SERV_PORT));
 	bind(listenfd,(struct sockaddr*) &servaddr,sizeof(servaddr));
 	listen(listenfd,LISTENQ);//允许LISTENQ来覆盖调用者所给的值,1024
-
+b
 	signal(SIGCHLD,sig_chld);//waitpid()处理僵尸进程
 	while(true)
 	{
 		struct sockaddr_in cliaddr;
 		socklen_t len = sizeof(cliaddr);
-		int connfd;
-		if((connfd = accept(listenfd,(struct sockaddr*) &cliaddr,&len)) < 0)
-		//在这里会阻塞，直到建立起连接
+		int connfd = accept(listenfd,(struct sockaddr*) &cliaddr,&len);
+		if(connfd < 0)
 		{
-		   if(errno == EINTR) continue;
+		   if(errno == EINTR) continue;//restart the accetp if it is terminated
 		   else printf("accept error");
 		}
 		pid_t childpld;

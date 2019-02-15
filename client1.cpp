@@ -14,31 +14,48 @@ struct sockaddr_in
         char sin_zero[8];
 };*/
 
-void setAddr(struct sockaddr_in &servaddr,sa_family_t family,in_addr_t addr,in_port_t port)
+void setAddr(struct sockaddr_in &servaddr,sa_family_t family,in_port_t port)
 {
         bzero(&servaddr,sizeof(servaddr));//bzero将套接口地址初始化为0
         servaddr.sin_family = family;
-        servaddr.sin_addr.s_addr = addr;//通配地址由INADDR_ANY指定，通知内核选择ip地址
         servaddr.sin_port = port;
 }
-void msgToSend(FILE *fp,int sockFd)
+void msgToSend(FILE *fp,int sockfd)
 {
         char sendline[MAXLINE],recvline[MAXLINE];
-        while(fgets(sendline,MAXLINE,fp) != NULL)
+        fd_set rset;
+        FD_ZERO(&rset);
+        int stdineof = 0;//if = 0,input continue  if = 1,it is already eof
+        while(true)
         {
-                char timeToSend[MAXLINE+20];
-                time_t ticks = time(NULL);
-                snprintf(timeToSend,sizeof(timeToSend),"%.24s",ctime(&ticks));
-                strcat(timeToSend," ");
-                strcat(timeToSend,sendline);
-                strcpy(sendline,timeToSend);
-                write(sockFd,sendline,strlen(sendline));
-                if(read(sockFd,recvline,MAXLINE) == 0)
+                FD_SET(sockfd,&rset);
+                FD_SET(fileno(fp),&rset);
+                int maxfdp1 = max(fileno(fp),sockfd)+1;
+                Select(maxfdp1,&rset,NULL,NULL,NULL);
+                if(FD_ISSET(sockfd,&rset))
                 {
-                        printf("read msg error!");
-                        return;
+                        if(read(sockfd,recvline,MAXLINE) == 0)
+                        {
+                                if(stdineof == 1) return;
+                                else 
+                                {
+                                        printf("server terminated prematurely!");
+                                        return;
+                                }
+                        }
+                        fputs(recvline,stdout);
                 }
-                fputs(recvline,stdout);
+                if(FD_ISSET(fileno(fp),&rset))
+                {
+                        if(fgets(sendline,MAXLINE,fp) == NULL)
+                        {
+                                stdinof = 1;
+                                Shutdown(sockfd,SHUT_WR);
+                                FD_CLR(fileno(fp),&rset);
+                                continue;
+                        }
+                        write(sockfd,sendline,strlen(sendline));
+                }
                 memset(sendline,0,sizeof(sendline));
                 memset(recvline,0,sizeof(recvline));
         }
@@ -50,20 +67,15 @@ int main(int argc,char** argv)
                 printf("输入错误，需要输入ip地址\n");
                 exit(0);
         }
-        int sockfd[5];	
-	for(int i = 0;i < 5;i++)
-	{
-		sockfd[i] = socket(AF_INET,SOCK_STREAM,0);
-		struct sockaddr_in servaddr;
-                setAddr(servaddr,AF_INET,htonl(INADDR_ANY),htons(SERV_PORT));
-                if(inet_pton(AF_INET,argv[1],&servaddr.sin_addr.s_addr) != 1)
-                {
-                        printf("error address");
-                        exit(0);
-                }
-                connect(sockfd[i],(struct sockaddr*) &servaddr,sizeof(servaddr));
-	}
-        msgToSend(stdin,sockfd[0]);
+        int sockfd = socket(AF_INET,SOCK_STREAM,0);
+        struct sockaddr_in servaddr;
+        setAddr(servaddr,AF_INET,htons(SERV_PORT));
+        if(inet_pton(AF_INET,argv[1],&servaddr.sin_addr.s_addr) == 1)
+        {
+                connect(sockfd,(struct sockaddr*) &servaddr,sizeof(servaddr));
+        }
+        // msgToSend(stdin,sockfd[0]);
+        msgToSend(stdin,sockfd);
         exit(0);
 }
 
